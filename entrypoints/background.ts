@@ -76,13 +76,12 @@ export default defineBackground(() => {
 	});
 
 	onMessage("prefetchLyrics", async ({ data }) => {
-		if (!data.artist || !data.title) return;
-		// Fire-and-forget from the caller's perspective; we still wait here
-		// so errors are logged and we don't leave dangling promises.
+		if (!data.artist || !data.title) return false;
 		try {
-			await getOrFetch(data.artist, data.title);
+			const r = await getOrFetch(data.artist, data.title);
+			return r !== null;
 		} catch {
-			// swallow — prefetch must not break the foreground UI
+			return false;
 		}
 	});
 

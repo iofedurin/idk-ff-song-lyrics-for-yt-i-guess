@@ -6,12 +6,15 @@ import {
 	type XY,
 } from "../lib/storage";
 
+export type ButtonStatus = "idle" | "loading" | "found";
+
 interface Props {
 	onClick: () => void;
 	active: boolean;
+	status: ButtonStatus;
 }
 
-export function FloatingButton({ onClick, active }: Props) {
+export function FloatingButton({ onClick, active, status }: Props) {
 	const storageItem =
 		location.hostname === "music.youtube.com"
 			? buttonPositionYtMusicStorage
@@ -26,6 +29,13 @@ export function FloatingButton({ onClick, active }: Props) {
 	}, [storageItem]);
 
 	if (!pos) return null;
+
+	const ringClass =
+		status === "loading"
+			? "yt-lyrics-btn-ring yt-lyrics-btn-ring--loading"
+			: status === "found"
+				? "yt-lyrics-btn-ring yt-lyrics-btn-ring--found"
+				: null;
 
 	return (
 		<Rnd
@@ -53,6 +63,7 @@ export function FloatingButton({ onClick, active }: Props) {
 				}}
 				title="YouTube Lyrics — drag to move, double-click to reset"
 				style={{
+					position: "relative",
 					width: 40,
 					height: 40,
 					borderRadius: "50%",
@@ -70,7 +81,7 @@ export function FloatingButton({ onClick, active }: Props) {
 					transition: "background 0.15s ease",
 				}}
 			>
-				♪
+				♪{ringClass && <span className={ringClass} />}
 			</button>
 		</Rnd>
 	);

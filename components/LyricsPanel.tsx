@@ -226,7 +226,19 @@ export function LyricsPanel({ meta, onClose }: Props) {
 						</div>
 					)}
 					{state.kind === "loading" && (
-						<div style={{ opacity: 0.6 }}>Loading…</div>
+						<div
+							style={{
+								display: "flex",
+								alignItems: "center",
+								justifyContent: "center",
+								gap: 10,
+								padding: "32px 0",
+								opacity: 0.75,
+							}}
+						>
+							<span className="yt-lyrics-spinner" />
+							<span>Loading…</span>
+						</div>
 					)}
 					{state.kind === "empty" && (
 						<div style={{ opacity: 0.6 }}>

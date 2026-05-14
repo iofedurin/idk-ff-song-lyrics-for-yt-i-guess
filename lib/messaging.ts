@@ -8,10 +8,10 @@ interface ProtocolMap {
 	fetchLyrics(data: { artist: string; title: string }): LyricsResult | null;
 	searchLyrics(data: { query: string }): SearchHit[];
 	fetchById(data: { hit: SearchHit }): LyricsResult | null;
-	// Fire-and-forget warm-up. Caller doesn't await the network roundtrip,
-	// but the background populates its cache so a subsequent fetchLyrics
-	// returns instantly.
-	prefetchLyrics(data: { artist: string; title: string }): void;
+	// Warm-up the background cache so a subsequent fetchLyrics returns
+	// instantly. Returns true if lyrics were found (so the UI can show
+	// "ready" affordances on the floating button), false otherwise.
+	prefetchLyrics(data: { artist: string; title: string }): boolean;
 }
 
 export const { sendMessage, onMessage } =

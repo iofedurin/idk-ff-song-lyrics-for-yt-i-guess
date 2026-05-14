@@ -1,6 +1,9 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import ReactDOM from "react-dom/client";
-import { FloatingButton } from "../../components/FloatingButton";
+import {
+	type ButtonStatus,
+	FloatingButton,
+} from "../../components/FloatingButton";
 import { LyricsPanel } from "../../components/LyricsPanel";
 import { sendMessage } from "../../lib/messaging";
 import {
@@ -14,6 +17,9 @@ function App() {
 	const [open, setOpen] = useState(false);
 	const [meta, setMeta] = useState<VideoMeta | null>(null);
 	const [visible, setVisible] = useState(isWatchPage());
+	const [btnStatus, setBtnStatus] = useState<ButtonStatus>("idle");
+	// Token to discard stale prefetch responses when video changes mid-flight.
+	const prefetchToken = useRef(0);
 
 	useEffect(() => {
 		// Avoid duplicate prefetches when refresh fires twice (early + late).
@@ -31,24 +37,39 @@ function App() {
 				const key = `${m.artist}|${m.title}`;
 				if (key !== lastPrefetchKey) {
 					lastPrefetchKey = key;
+					const token = ++prefetchToken.current;
+					setBtnStatus("loading");
 					sendMessage("prefetchLyrics", {
 						artist: m.artist,
 						title: m.title,
-					}).catch(() => {
-						// prefetch must never throw into the UI
-					});
+					})
+						.then((found) => {
+							if (token !== prefetchToken.current) return;
+							setBtnStatus(found ? "found" : "idle");
+						})
+						.catch(() => {
+							if (token !== prefetchToken.current) return;
+							setBtnStatus("idle");
+						});
 				}
 			}
+		};
+
+		const onNavigated = () => {
+			// New video — drop any prior prefetch state immediately so the
+			// stale "found" badge doesn't linger on the new video.
+			prefetchToken.current++;
+			setBtnStatus("idle");
+			lastPrefetchKey = "";
+			setTimeout(refresh, 400);
+			setTimeout(refresh, 1500);
 		};
 
 		// YT renders the metadata asynchronously after navigation. Hit it
 		// twice: once early (cache-warm load) and once after YT has settled.
 		const t1 = setTimeout(refresh, 400);
 		const t2 = setTimeout(refresh, 1500);
-		const off = onVideoChange(() => {
-			setTimeout(refresh, 400);
-			setTimeout(refresh, 1500);
-		});
+		const off = onVideoChange(onNavigated);
 
 		return () => {
 			clearTimeout(t1);
@@ -61,7 +82,11 @@ function App() {
 
 	return (
 		<>
-			<FloatingButton onClick={() => setOpen((v) => !v)} active={open} />
+			<FloatingButton
+				onClick={() => setOpen((v) => !v)}
+				active={open}
+				status={btnStatus}
+			/>
 			{open && <LyricsPanel meta={meta} onClose={() => setOpen(false)} />}
 		</>
 	);
