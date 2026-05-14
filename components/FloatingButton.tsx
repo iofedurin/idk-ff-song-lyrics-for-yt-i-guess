@@ -71,8 +71,9 @@ export function FloatingButton({ onClick, active, status }: Props) {
 					width: 40,
 					height: 40,
 					borderRadius: "50%",
-					background: active ? "#ff5277" : "rgba(20, 20, 28, 0.85)",
-					color: "white",
+					background: "rgba(20, 20, 28, 0.85)",
+					// When panel is open, only the icon tints — no aggressive fill.
+					color: active ? "#7dd3fc" : "white",
 					border: "1px solid rgba(255,255,255,0.18)",
 					cursor: "grab",
 					display: "flex",
@@ -82,7 +83,7 @@ export function FloatingButton({ onClick, active, status }: Props) {
 					fontSize: 20,
 					lineHeight: 1,
 					padding: 0,
-					transition: "background 0.15s ease",
+					transition: "color 0.15s ease",
 				}}
 			>
 				♪{ringClass && <span className={ringClass} />}
