@@ -19,6 +19,15 @@ bun run build        # production build → .output/firefox-mv3/
 bun run zip          # zipped distribution → .output/*.zip
 ```
 
+### Chrome (dev only)
+
+```bash
+bun run dev:chrome
+bun run build:chrome   # → .output/chrome-mv3/
+```
+
+Chrome is supported for local development / debugging only — Firefox is the release target (signed via AMO). The codebase is browser-agnostic; the only practical difference is the Genius parser, which falls back from `DOMParser` (Firefox event page) to regex-based HTML extraction so Chrome's service-worker background doesn't break.
+
 ## Release
 
 1. Bump `version` in `package.json`.
