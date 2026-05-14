@@ -26,8 +26,18 @@ function readYouTube(): VideoMeta | null {
 			"ytd-watch-metadata ytd-channel-name yt-formatted-string",
 		);
 
-	const videoTitle =
-		titleEl?.textContent?.trim() || stripYouTubeSuffix(document.title);
+	// Prefer the in-page H1 because YT updates it AFTER fetching the player
+	// config. document.title is set early (server-rendered) but starts out
+	// as a placeholder ("YouTube" / "Loading - YouTube") immediately after
+	// a page reload, which would otherwise leak into our prefetch query.
+	const domTitle = titleEl?.textContent?.trim() ?? "";
+	const docTitleStripped = stripYouTubeSuffix(document.title);
+	const videoTitle = !isPlaceholderTitle(domTitle)
+		? domTitle
+		: !isPlaceholderTitle(docTitleStripped)
+			? docTitleStripped
+			: "";
+
 	const channelName = channelEl?.textContent?.trim() ?? "";
 	const videoId = new URL(location.href).searchParams.get("v");
 	if (!videoTitle) return null;
@@ -41,6 +51,16 @@ function readYouTube(): VideoMeta | null {
 		isYtMusic: false,
 		isMusic: detectMusic(channelName),
 	};
+}
+
+// Loading-state titles YouTube briefly shows before the real metadata is
+// populated. Without this filter, our polling would happily apply them
+// and fire prefetch with garbage like artist="" / title="YouTube".
+function isPlaceholderTitle(t: string): boolean {
+	if (!t) return true;
+	if (t === "YouTube" || t === "YouTube Music") return true;
+	if (/^Loading\b/i.test(t)) return true;
+	return false;
 }
 
 function readYtMusic(): VideoMeta | null {
