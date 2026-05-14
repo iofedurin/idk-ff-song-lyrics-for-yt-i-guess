@@ -45,6 +45,10 @@ export function FloatingButton({ onClick, active, status }: Props) {
 			onDragStart={() => setDragged(false)}
 			onDrag={() => setDragged(true)}
 			onDragStop={(_, d) => {
+				// react-rnd fires onDragStop on every mousedown/up even without
+				// movement, sometimes with d={x:0, y:0}. Without this guard a
+				// plain click on the button would overwrite the saved position.
+				if (!dragged) return;
 				const np = { x: d.x, y: d.y };
 				setPos(np);
 				storageItem.setValue(np);

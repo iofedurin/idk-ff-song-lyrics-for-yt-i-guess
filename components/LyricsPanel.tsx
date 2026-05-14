@@ -106,7 +106,12 @@ export function LyricsPanel({ meta, prefetched, onClose }: Props) {
 
 	// Auto-fetch when meta changes (or first becomes available).
 	useEffect(() => {
-		if (!videoTitle) return;
+		if (!videoTitle) {
+			// Meta was cleared (likely a SPA navigation in progress). Reset
+			// to loading so we don't keep showing the previous video's lyrics.
+			setState({ kind: "loading" });
+			return;
+		}
 		const q = `${artist} ${title}`.trim() || videoTitle;
 		setQuery(q);
 

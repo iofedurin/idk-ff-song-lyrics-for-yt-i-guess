@@ -26,8 +26,9 @@ function App() {
 	const prefetchToken = useRef(0);
 
 	useEffect(() => {
-		// Avoid duplicate prefetches when refresh fires twice (early + late).
+		// Avoid duplicate prefetches when refresh fires twice mid-poll.
 		let lastPrefetchKey = "";
+		let pollTimer: ReturnType<typeof setTimeout> | undefined;
 
 		const refresh = () => {
 			setVisible(isWatchPage());
@@ -59,26 +60,45 @@ function App() {
 			}
 		};
 
+		// Fixed delays missed slow playlist transitions. Instead, poll until
+		// the DOM-read videoId matches the URL's `?v=` param — that's the
+		// moment YT actually swapped metadata to the new track.
+		const pollUntilFresh = () => {
+			if (pollTimer) clearTimeout(pollTimer);
+			const expectedVideoId = new URLSearchParams(location.search).get("v");
+			let attempts = 0;
+
+			const tick = () => {
+				refresh();
+				const m = readCurrentVideoMeta();
+				const done = m
+					? expectedVideoId
+						? m.videoId === expectedVideoId
+						: true // YT Music has no videoId in URL — any non-null meta is "fresh"
+					: false;
+				if (done) return;
+				if (++attempts > 24) return; // 24 × 250ms = 6 s ceiling
+				pollTimer = setTimeout(tick, 250);
+			};
+			tick();
+		};
+
 		const onNavigated = () => {
-			// New video — drop any prior prefetch state immediately so the
-			// stale "found" badge doesn't linger on the new video.
+			// New video. Drop everything from the previous track immediately
+			// so the panel can't keep showing stale lyrics under a new song.
 			prefetchToken.current++;
 			setBtnStatus("idle");
 			setPrefetched(null);
+			setMeta(null);
 			lastPrefetchKey = "";
-			setTimeout(refresh, 400);
-			setTimeout(refresh, 1500);
+			pollUntilFresh();
 		};
 
-		// YT renders the metadata asynchronously after navigation. Hit it
-		// twice: once early (cache-warm load) and once after YT has settled.
-		const t1 = setTimeout(refresh, 400);
-		const t2 = setTimeout(refresh, 1500);
+		pollUntilFresh();
 		const off = onVideoChange(onNavigated);
 
 		return () => {
-			clearTimeout(t1);
-			clearTimeout(t2);
+			if (pollTimer) clearTimeout(pollTimer);
 			off();
 		};
 	}, []);
