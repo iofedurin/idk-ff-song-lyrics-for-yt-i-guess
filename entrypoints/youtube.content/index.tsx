@@ -41,10 +41,13 @@ function App() {
 			setMeta(m);
 			lastSeenTitle = m?.videoTitle ?? "";
 
-			// Warm the background cache for music videos so opening the
-			// panel later returns instantly. Skip non-music videos to avoid
-			// hitting LRCLib for every random clip.
-			if (m?.isMusic && m.artist && m.title) {
+			// Always prefetch if we have a parseable artist + title.
+			// The earlier `isMusic` gate relied on JSON-LD `genre: "Music"`,
+			// but YouTube does NOT inject that microdata on playlist pages
+			// — so every video opened inside a playlist false-negatived and
+			// prefetch was silently skipped. LRCLib is free and returns
+			// quickly (cached as null) for non-music, so always-on is fine.
+			if (m?.artist && m.title) {
 				const key = `${m.artist}|${m.title}`;
 				if (key !== lastPrefetchKey) {
 					lastPrefetchKey = key;
@@ -84,10 +87,11 @@ function App() {
 					return;
 				}
 				if (++attempts > 24) {
-					// 6 s ceiling — give up waiting and apply whatever we have
-					// (worst case: panel keeps showing the previous track, but
-					// we'd rather flush the loading spinner than spin forever).
-					applyMeta(m);
+					// 6 s ceiling. We deliberately do NOT applyMeta(m) here —
+					// that would feed the previous track's metadata back into
+					// the panel and (cache-hit) display its lyrics under the
+					// new video. Better to leave the panel in its loading
+					// state until the user refreshes manually.
 					return;
 				}
 				pollTimer = setTimeout(tick, 250);
