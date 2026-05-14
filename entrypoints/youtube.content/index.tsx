@@ -19,17 +19,13 @@ function App() {
 			setVisible(isWatchPage());
 			setMeta(readCurrentVideoMeta());
 		};
-
-		// YT renders the metadata asynchronously after navigation. Two
-		// passes (early + delayed) covers both fast cache hits and slow loads.
+		// YT renders the metadata asynchronously after navigation.
 		const t1 = setTimeout(refresh, 400);
 		const t2 = setTimeout(refresh, 1500);
-
 		const off = onVideoChange(() => {
 			setTimeout(refresh, 400);
 			setTimeout(refresh, 1500);
 		});
-
 		return () => {
 			clearTimeout(t1);
 			clearTimeout(t2);
@@ -58,19 +54,18 @@ function isWatchPage(): boolean {
 export default defineContentScript({
 	matches: ["*://www.youtube.com/*", "*://music.youtube.com/*"],
 	cssInjectionMode: "ui",
+	runAt: "document_idle",
 	async main(ctx) {
 		const ui = await createShadowRootUi(ctx, {
 			name: "yt-lyrics-overlay",
-			position: "inline",
-			anchor: "body",
+			// Overlay mode mounts a 0×0 anchor at top-left, so children with
+			// position: absolute resolve their x/y as viewport coordinates.
+			position: "overlay",
+			alignment: "top-left",
+			zIndex: 2147483646,
+			anchor: "html",
 			onMount(container) {
-				// Full-viewport transparent wrapper so absolutely-positioned
-				// Rnd children resolve x/y against the viewport.
-				const wrapper = document.createElement("div");
-				wrapper.style.cssText =
-					"position: fixed; inset: 0; pointer-events: none; z-index: 2147483646;";
-				container.append(wrapper);
-				const root = ReactDOM.createRoot(wrapper);
+				const root = ReactDOM.createRoot(container);
 				root.render(<App />);
 				return root;
 			},
