@@ -26,3 +26,13 @@ export interface Provider {
 	search(query: string): Promise<SearchHit[]>;
 	fetchById(externalId: string): Promise<LyricsResult | null>;
 }
+
+export interface TestResult {
+	providerId: ProviderId;
+	enabled: boolean;
+	ok: boolean;
+	latencyMs: number;
+	hasPlain: boolean;
+	hasSynced: boolean;
+	error?: string;
+}

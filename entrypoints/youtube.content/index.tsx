@@ -4,7 +4,8 @@ import {
 	type ButtonStatus,
 	FloatingButton,
 } from "../../components/FloatingButton";
-import { LyricsPanel } from "../../components/LyricsPanel";
+import { LyricsPanel, type Prefetched } from "../../components/LyricsPanel";
+import type { LyricsResult } from "../../lib/lyrics/types";
 import { sendMessage } from "../../lib/messaging";
 import {
 	onVideoChange,
@@ -18,6 +19,9 @@ function App() {
 	const [meta, setMeta] = useState<VideoMeta | null>(null);
 	const [visible, setVisible] = useState(isWatchPage());
 	const [btnStatus, setBtnStatus] = useState<ButtonStatus>("idle");
+	// Result of the last completed prefetch — handed to the panel so it can
+	// render lyrics immediately without a second IPC roundtrip.
+	const [prefetched, setPrefetched] = useState<Prefetched | null>(null);
 	// Token to discard stale prefetch responses when video changes mid-flight.
 	const prefetchToken = useRef(0);
 
@@ -38,14 +42,14 @@ function App() {
 				if (key !== lastPrefetchKey) {
 					lastPrefetchKey = key;
 					const token = ++prefetchToken.current;
+					const artist = m.artist;
+					const title = m.title;
 					setBtnStatus("loading");
-					sendMessage("prefetchLyrics", {
-						artist: m.artist,
-						title: m.title,
-					})
-						.then((found) => {
+					sendMessage("prefetchLyrics", { artist, title })
+						.then((result: LyricsResult | null) => {
 							if (token !== prefetchToken.current) return;
-							setBtnStatus(found ? "found" : "idle");
+							setBtnStatus(result ? "found" : "idle");
+							setPrefetched({ key, result });
 						})
 						.catch(() => {
 							if (token !== prefetchToken.current) return;
@@ -60,6 +64,7 @@ function App() {
 			// stale "found" badge doesn't linger on the new video.
 			prefetchToken.current++;
 			setBtnStatus("idle");
+			setPrefetched(null);
 			lastPrefetchKey = "";
 			setTimeout(refresh, 400);
 			setTimeout(refresh, 1500);
@@ -87,7 +92,13 @@ function App() {
 				active={open}
 				status={btnStatus}
 			/>
-			{open && <LyricsPanel meta={meta} onClose={() => setOpen(false)} />}
+			{open && (
+				<LyricsPanel
+					meta={meta}
+					prefetched={prefetched}
+					onClose={() => setOpen(false)}
+				/>
+			)}
 		</>
 	);
 }

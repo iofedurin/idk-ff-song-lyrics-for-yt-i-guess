@@ -13,8 +13,17 @@ import { LyricsView } from "./LyricsView";
 import { ResultsList } from "./ResultsList";
 import { SearchBar } from "./SearchBar";
 
+/** Snapshot of a finished prefetch, handed from the content script to the
+ * panel so opening it doesn't need to make another IPC roundtrip. */
+export interface Prefetched {
+	/** `${artist}|${title}` — must match the panel's current meta to be used. */
+	key: string;
+	result: LyricsResult | null;
+}
+
 interface Props {
 	meta: VideoMeta | null;
+	prefetched: Prefetched | null;
 	onClose: () => void;
 }
 
@@ -26,7 +35,7 @@ type State =
 	| { kind: "empty" }
 	| { kind: "error"; message: string };
 
-export function LyricsPanel({ meta, onClose }: Props) {
+export function LyricsPanel({ meta, prefetched, onClose }: Props) {
 	const [pos, setPos] = useState<XY | null>(null);
 	const [size, setSize] = useState<Size>({ width: 400, height: 520 });
 	const [ready, setReady] = useState(false);
@@ -90,11 +99,28 @@ export function LyricsPanel({ meta, onClose }: Props) {
 		}
 	}, []);
 
+	// Match key against the content script's prefetched snapshot.
+	const metaKey = artist && title ? `${artist}|${title}` : "";
+	const prefetchedKey = prefetched?.key ?? "";
+	const prefetchedResult = prefetched?.result ?? null;
+
 	// Auto-fetch when meta changes (or first becomes available).
 	useEffect(() => {
 		if (!videoTitle) return;
 		const q = `${artist} ${title}`.trim() || videoTitle;
 		setQuery(q);
+
+		// Fast path: prefetch already completed and lyrics are sitting in the
+		// content script's memory. Skip the IPC roundtrip entirely so the
+		// panel doesn't flash a "Loading…" spinner on open.
+		if (
+			metaKey !== "" &&
+			prefetchedKey === metaKey &&
+			prefetchedResult !== null
+		) {
+			setState({ kind: "lyrics", result: prefetchedResult });
+			return;
+		}
 
 		const seq = ++seqRef.current;
 		setState({ kind: "loading" });
@@ -116,7 +142,15 @@ export function LyricsPanel({ meta, onClose }: Props) {
 			}
 			await runSearch(q);
 		})();
-	}, [videoTitle, artist, title, runSearch]);
+	}, [
+		videoTitle,
+		artist,
+		title,
+		metaKey,
+		prefetchedKey,
+		prefetchedResult,
+		runSearch,
+	]);
 
 	function resetToCurrentVideo() {
 		if (!videoTitle) return;

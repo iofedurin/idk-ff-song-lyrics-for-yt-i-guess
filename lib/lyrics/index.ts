@@ -1,7 +1,13 @@
 import { makeGeniusProvider } from "./genius";
 import { lrclibProvider } from "./lrclib";
 import { lyricsOvhProvider } from "./lyricsOvh";
-import type { LyricsResult, Provider, ProviderId, SearchHit } from "./types";
+import type {
+	LyricsResult,
+	Provider,
+	ProviderId,
+	SearchHit,
+	TestResult,
+} from "./types";
 
 export interface ProviderConfig {
 	preferredOrder: ProviderId[];
@@ -65,4 +71,57 @@ export async function fetchById(
 	} catch {
 		return null;
 	}
+}
+
+// Run every available provider against the same test track in parallel.
+// Order in the result mirrors the canonical provider order, NOT preferredOrder
+// — the test is for diagnostics, not for picking which one to use first.
+// Providers that aren't enabled (Genius without an API key) are still
+// reported so the user sees them in the table.
+const ALL_PROVIDERS: ProviderId[] = ["lrclib", "lyricsOvh", "genius"];
+
+export async function testProviders(
+	artist: string,
+	title: string,
+	cfg: ProviderConfig,
+): Promise<TestResult[]> {
+	const built = buildProviders(cfg);
+	return Promise.all(
+		ALL_PROVIDERS.map(async (id): Promise<TestResult> => {
+			const p = built.find((x) => x.id === id);
+			if (!p) {
+				return {
+					providerId: id,
+					enabled: false,
+					ok: false,
+					latencyMs: 0,
+					hasPlain: false,
+					hasSynced: false,
+					error: "disabled (no API key)",
+				};
+			}
+			const start = performance.now();
+			try {
+				const r = await p.fetchByExact(artist, title);
+				return {
+					providerId: id,
+					enabled: true,
+					ok: r !== null,
+					latencyMs: Math.round(performance.now() - start),
+					hasPlain: !!r?.plainLyrics,
+					hasSynced: !!r?.syncedLyrics,
+				};
+			} catch (e) {
+				return {
+					providerId: id,
+					enabled: true,
+					ok: false,
+					latencyMs: Math.round(performance.now() - start),
+					hasPlain: false,
+					hasSynced: false,
+					error: e instanceof Error ? e.message : String(e),
+				};
+			}
+		}),
+	);
 }

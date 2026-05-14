@@ -1,4 +1,9 @@
-import { fetchById, fetchLyrics, searchLyrics } from "../lib/lyrics";
+import {
+	fetchById,
+	fetchLyrics,
+	searchLyrics,
+	testProviders,
+} from "../lib/lyrics";
 import type { LyricsResult, ProviderId } from "../lib/lyrics/types";
 import { onMessage } from "../lib/messaging";
 import { geniusApiKeyStorage, preferredProviderStorage } from "../lib/storage";
@@ -76,12 +81,11 @@ export default defineBackground(() => {
 	});
 
 	onMessage("prefetchLyrics", async ({ data }) => {
-		if (!data.artist || !data.title) return false;
+		if (!data.artist || !data.title) return null;
 		try {
-			const r = await getOrFetch(data.artist, data.title);
-			return r !== null;
+			return await getOrFetch(data.artist, data.title);
 		} catch {
-			return false;
+			return null;
 		}
 	});
 
@@ -93,5 +97,10 @@ export default defineBackground(() => {
 	onMessage("fetchById", async ({ data }) => {
 		const cfg = await loadConfig();
 		return fetchById(data.hit, cfg);
+	});
+
+	onMessage("testProviders", async ({ data }) => {
+		const cfg = await loadConfig();
+		return testProviders(data.artist, data.title, cfg);
 	});
 });
