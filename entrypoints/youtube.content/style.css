@@ -1,0 +1,4 @@
+/* Shadow-root scoped. Reset so YouTube styles don't bleed in via inheritance. */
+:host {
+	all: initial;
+}

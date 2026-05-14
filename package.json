@@ -1,0 +1,36 @@
+{
+	"name": "yt-lyrics",
+	"description": "Firefox extension that shows lyrics for the currently playing YouTube video",
+	"private": true,
+	"version": "0.1.0",
+	"type": "module",
+	"scripts": {
+		"dev": "wxt -b firefox",
+		"build": "wxt build -b firefox",
+		"zip": "wxt zip -b firefox",
+		"compile": "tsc --noEmit",
+		"postinstall": "wxt prepare",
+		"test": "vitest run",
+		"test:watch": "vitest",
+		"lint": "biome check .",
+		"lint:fix": "biome check --write ."
+	},
+	"dependencies": {
+		"@webext-core/messaging": "^2.3.0",
+		"react": "^19.2.4",
+		"react-dom": "^19.2.4",
+		"react-rnd": "^10.5.2"
+	},
+	"devDependencies": {
+		"@biomejs/biome": "^2.4.9",
+		"@resvg/resvg-js": "^2.6.2",
+		"@tailwindcss/vite": "^4.2.2",
+		"@types/react": "^19.2.14",
+		"@types/react-dom": "^19.2.3",
+		"@wxt-dev/module-react": "^1.1.5",
+		"tailwindcss": "^4.2.2",
+		"typescript": "^5.9.3",
+		"vitest": "^4.1.2",
+		"wxt": "^0.20.20"
+	}
+}

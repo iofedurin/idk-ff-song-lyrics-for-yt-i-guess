@@ -1,0 +1,37 @@
+name: Build & Release
+
+on:
+  push:
+    tags:
+      - "v*"
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+
+      - run: bun install --frozen-lockfile
+
+      - run: bun run build
+
+      - name: Sign extension (AMO unlisted)
+        run: |
+          bunx web-ext sign \
+            --source-dir .output/firefox-mv3 \
+            --channel unlisted \
+            --api-key "${{ secrets.AMO_API_KEY }}" \
+            --api-secret "${{ secrets.AMO_API_SECRET }}"
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: web-ext-artifacts/*.xpi
+          generate_release_notes: true
