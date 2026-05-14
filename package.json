@@ -2,7 +2,7 @@
 	"name": "yt-lyrics",
 	"description": "Firefox extension that shows lyrics for the currently playing YouTube video",
 	"private": true,
-	"version": "0.10.0",
+	"version": "0.11.0",
 	"type": "module",
 	"scripts": {
 		"dev": "wxt -b firefox",

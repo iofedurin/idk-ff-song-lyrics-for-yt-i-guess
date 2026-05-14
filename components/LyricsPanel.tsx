@@ -35,15 +35,24 @@ type State =
 	| { kind: "empty" }
 	| { kind: "error"; message: string };
 
+// Rendered height of the panel when minimized — just the drag bar.
+const HEADER_HEIGHT = 36;
+
 export function LyricsPanel({ meta, prefetched, onClose }: Props) {
 	const [pos, setPos] = useState<XY | null>(null);
 	const [size, setSize] = useState<Size>({ width: 400, height: 520 });
 	const [ready, setReady] = useState(false);
+	const [minimized, setMinimized] = useState(false);
 
 	const [state, setState] = useState<State>({ kind: "idle" });
 	const [query, setQuery] = useState("");
 	// Ignore late responses when a newer request has fired.
 	const seqRef = useRef(0);
+	// True once the user has typed in the search box or clicked Search.
+	// Resets when meta changes (new video → fresh auto behavior). Used to
+	// suppress the prefetched-arrives autopilot so a manual search in flight
+	// isn't overwritten by a late-arriving prefetch result.
+	const [userTookOver, setUserTookOver] = useState(false);
 
 	// Pull primitives out so useEffect deps match what the closure actually
 	// captures. Object identity of `meta` changes on every refresh poll, so
@@ -87,6 +96,7 @@ export function LyricsPanel({ meta, prefetched, onClose }: Props) {
 	}, []);
 
 	const pickHit = useCallback(async (hit: SearchHit) => {
+		setUserTookOver(true);
 		const seq = ++seqRef.current;
 		setState({ kind: "loading" });
 		try {
@@ -101,34 +111,28 @@ export function LyricsPanel({ meta, prefetched, onClose }: Props) {
 
 	// Match key against the content script's prefetched snapshot.
 	const metaKey = artist && title ? `${artist}|${title}` : "";
-	const prefetchedKey = prefetched?.key ?? "";
-	const prefetchedResult = prefetched?.result ?? null;
 
-	// Auto-fetch when meta changes (or first becomes available).
+	// 1. Auto-fill the search box when meta changes (new video). Once filled,
+	//    the user is free to edit it without us clobbering their input on every
+	//    prefetched/state change.
+	useEffect(() => {
+		if (!videoTitle) return;
+		setQuery(`${artist} ${title}`.trim() || videoTitle);
+		// New video → reset "user took over" flag so the auto-pipeline runs again.
+		setUserTookOver(false);
+	}, [videoTitle, artist, title]);
+
+	// 2. Show loading + (re)fetch when meta primitives change. Manual searches
+	//    use seqRef to invalidate this fetch's late response if the user clicks
+	//    Search before we finish.
 	useEffect(() => {
 		if (!videoTitle) {
-			// Meta was cleared (likely a SPA navigation in progress). Reset
-			// to loading so we don't keep showing the previous video's lyrics.
 			setState({ kind: "loading" });
 			return;
 		}
-		const q = `${artist} ${title}`.trim() || videoTitle;
-		setQuery(q);
-
-		// Fast path: prefetch already completed and lyrics are sitting in the
-		// content script's memory. Skip the IPC roundtrip entirely so the
-		// panel doesn't flash a "Loading…" spinner on open.
-		if (
-			metaKey !== "" &&
-			prefetchedKey === metaKey &&
-			prefetchedResult !== null
-		) {
-			setState({ kind: "lyrics", result: prefetchedResult });
-			return;
-		}
-
 		const seq = ++seqRef.current;
 		setState({ kind: "loading" });
+		const q = `${artist} ${title}`.trim() || videoTitle;
 
 		(async () => {
 			if (artist && title) {
@@ -147,20 +151,33 @@ export function LyricsPanel({ meta, prefetched, onClose }: Props) {
 			}
 			await runSearch(q);
 		})();
-	}, [
-		videoTitle,
-		artist,
-		title,
-		metaKey,
-		prefetchedKey,
-		prefetchedResult,
-		runSearch,
-	]);
+	}, [videoTitle, artist, title, runSearch]);
+
+	// 3. Apply a freshly-arrived prefetch result (instant display, no IPC) —
+	//    but ONLY if the user hasn't started a manual search, and only if the
+	//    panel is still in the "loading" state. Otherwise we'd overwrite a
+	//    manual search-in-progress with the auto guess.
+	useEffect(() => {
+		if (userTookOver) return;
+		if (!prefetched || prefetched.key !== metaKey || !prefetched.result) return;
+		const result = prefetched.result;
+		setState((current) =>
+			current.kind === "loading" ? { kind: "lyrics", result } : current,
+		);
+	}, [prefetched, metaKey, userTookOver]);
+
+	function handleSearchSubmit() {
+		// User explicitly took control — invalidate the auto-pipeline and
+		// run a manual search with whatever's in the input right now.
+		setUserTookOver(true);
+		runSearch(query);
+	}
 
 	function resetToCurrentVideo() {
 		if (!videoTitle) return;
 		const q = `${artist} ${title}`.trim() || videoTitle;
 		setQuery(q);
+		setUserTookOver(false);
 		if (artist && title) {
 			const seq = ++seqRef.current;
 			setState({ kind: "loading" });
@@ -176,12 +193,19 @@ export function LyricsPanel({ meta, prefetched, onClose }: Props) {
 
 	if (!ready || !pos) return null;
 
+	// When minimized, render the panel at header height only. Storage still
+	// holds the user's expanded size so restoring keeps their preference.
+	const renderSize = minimized
+		? { width: size.width, height: HEADER_HEIGHT }
+		: size;
+
 	return (
 		<Rnd
 			position={pos}
-			size={size}
+			size={renderSize}
 			minWidth={320}
-			minHeight={280}
+			minHeight={minimized ? HEADER_HEIGHT : 280}
+			enableResizing={!minimized}
 			bounds="window"
 			dragHandleClassName="yt-lyrics-drag"
 			onDragStop={(_, d) => {
@@ -233,32 +257,45 @@ export function LyricsPanel({ meta, prefetched, onClose }: Props) {
 					}}
 				>
 					<strong style={{ fontSize: 13, letterSpacing: 0.2 }}>♪ Lyrics</strong>
-					<button
-						type="button"
-						onClick={onClose}
-						style={{
-							background: "transparent",
-							border: "none",
-							color: "#aaa",
-							cursor: "pointer",
-							fontSize: 20,
-							lineHeight: 1,
-							padding: "0 4px",
-						}}
-						aria-label="Close"
-					>
-						×
-					</button>
+					<div style={{ display: "flex", gap: 2 }}>
+						<button
+							type="button"
+							onClick={() => setMinimized((m) => !m)}
+							style={headerBtnStyle}
+							aria-label={minimized ? "Expand" : "Minimize"}
+							title={minimized ? "Expand" : "Minimize"}
+						>
+							{minimized ? "▢" : "—"}
+						</button>
+						<button
+							type="button"
+							onClick={onClose}
+							style={headerBtnStyle}
+							aria-label="Close"
+							title="Close"
+						>
+							×
+						</button>
+					</div>
 				</div>
 
-				<SearchBar
-					query={query}
-					onQueryChange={setQuery}
-					onSubmit={() => runSearch(query)}
-					onReset={resetToCurrentVideo}
-				/>
+				{!minimized && (
+					<SearchBar
+						query={query}
+						onQueryChange={setQuery}
+						onSubmit={handleSearchSubmit}
+						onReset={resetToCurrentVideo}
+					/>
+				)}
 
-				<div style={{ flex: 1, overflow: "auto", padding: 12 }}>
+				<div
+					style={{
+						flex: 1,
+						overflow: "auto",
+						padding: 12,
+						display: minimized ? "none" : undefined,
+					}}
+				>
 					{state.kind === "idle" && !meta && (
 						<div style={{ opacity: 0.6 }}>
 							Waiting for video info… you can also search manually above.
@@ -303,3 +340,14 @@ function defaultPos(size: Size): XY {
 		y: 80,
 	};
 }
+
+const headerBtnStyle: React.CSSProperties = {
+	background: "transparent",
+	border: "none",
+	color: "#aaa",
+	cursor: "pointer",
+	fontSize: 16,
+	lineHeight: 1,
+	padding: "2px 8px",
+	borderRadius: 3,
+};
