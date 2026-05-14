@@ -29,11 +29,17 @@ function App() {
 		// Avoid duplicate prefetches when refresh fires twice mid-poll.
 		let lastPrefetchKey = "";
 		let pollTimer: ReturnType<typeof setTimeout> | undefined;
+		// Closure-scoped record of the DOM-read title at the moment of the
+		// last successful refresh. Used as the "previous" anchor when polling
+		// after navigation, so we can tell whether YT has actually swapped
+		// metadata in the DOM (videoId from the URL is useless here — it
+		// updates instantly, way before the DOM does).
+		let lastSeenTitle = "";
 
-		const refresh = () => {
+		const applyMeta = (m: VideoMeta | null) => {
 			setVisible(isWatchPage());
-			const m = readCurrentVideoMeta();
 			setMeta(m);
+			lastSeenTitle = m?.videoTitle ?? "";
 
 			// Warm the background cache for music videos so opening the
 			// panel later returns instantly. Skip non-music videos to avoid
@@ -60,24 +66,30 @@ function App() {
 			}
 		};
 
-		// Fixed delays missed slow playlist transitions. Instead, poll until
-		// the DOM-read videoId matches the URL's `?v=` param — that's the
-		// moment YT actually swapped metadata to the new track.
-		const pollUntilFresh = () => {
+		// Poll the DOM every 250ms until its video title differs from the
+		// previously-known one. That's the moment YT has actually finished
+		// swapping `<ytd-watch-metadata>` for the new track.
+		const pollUntilFresh = (previousTitle: string) => {
 			if (pollTimer) clearTimeout(pollTimer);
-			const expectedVideoId = new URLSearchParams(location.search).get("v");
 			let attempts = 0;
 
 			const tick = () => {
-				refresh();
 				const m = readCurrentVideoMeta();
-				const done = m
-					? expectedVideoId
-						? m.videoId === expectedVideoId
-						: true // YT Music has no videoId in URL — any non-null meta is "fresh"
-					: false;
-				if (done) return;
-				if (++attempts > 24) return; // 24 × 250ms = 6 s ceiling
+				const currentTitle = m?.videoTitle ?? "";
+				const looksFresh =
+					currentTitle !== "" && currentTitle !== previousTitle;
+
+				if (looksFresh) {
+					applyMeta(m);
+					return;
+				}
+				if (++attempts > 24) {
+					// 6 s ceiling — give up waiting and apply whatever we have
+					// (worst case: panel keeps showing the previous track, but
+					// we'd rather flush the loading spinner than spin forever).
+					applyMeta(m);
+					return;
+				}
 				pollTimer = setTimeout(tick, 250);
 			};
 			tick();
@@ -91,10 +103,12 @@ function App() {
 			setPrefetched(null);
 			setMeta(null);
 			lastPrefetchKey = "";
-			pollUntilFresh();
+			pollUntilFresh(lastSeenTitle);
 		};
 
-		pollUntilFresh();
+		// Initial load: empty `previousTitle` means any non-empty DOM title
+		// will be accepted on the first tick.
+		pollUntilFresh("");
 		const off = onVideoChange(onNavigated);
 
 		return () => {
