@@ -31,5 +31,8 @@ jobs:
         with:
           name: yt-lyrics-${{ github.sha }}
           path: .output/*.zip
+          # .output/ starts with a dot, so v4 treats files inside it as hidden
+          # and skips them by default.
+          include-hidden-files: true
           if-no-files-found: error
           retention-days: 90
