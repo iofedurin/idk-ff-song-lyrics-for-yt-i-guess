@@ -29,24 +29,20 @@ function App() {
 		// Avoid duplicate prefetches when refresh fires twice mid-poll.
 		let lastPrefetchKey = "";
 		let pollTimer: ReturnType<typeof setTimeout> | undefined;
-		// Closure-scoped record of the DOM-read title at the moment of the
-		// last successful refresh. Used as the "previous" anchor when polling
-		// after navigation, so we can tell whether YT has actually swapped
-		// metadata in the DOM (videoId from the URL is useless here — it
-		// updates instantly, way before the DOM does).
-		let lastSeenTitle = "";
+		// Track what we last successfully applied. videoId is the canonical
+		// identity (from the URL — instantly correct after navigation); title
+		// is used as the "DOM has caught up" signal during polling.
+		let lastAppliedVideoId: string | null = null;
+		let lastAppliedTitle = "";
 
 		const applyMeta = (m: VideoMeta | null) => {
 			setVisible(isWatchPage());
 			setMeta(m);
-			lastSeenTitle = m?.videoTitle ?? "";
+			lastAppliedVideoId = m?.videoId ?? null;
+			lastAppliedTitle = m?.videoTitle ?? "";
 
-			// Always prefetch if we have a parseable artist + title.
-			// The earlier `isMusic` gate relied on JSON-LD `genre: "Music"`,
-			// but YouTube does NOT inject that microdata on playlist pages
-			// — so every video opened inside a playlist false-negatived and
-			// prefetch was silently skipped. LRCLib is free and returns
-			// quickly (cached as null) for non-music, so always-on is fine.
+			// Always prefetch if we have a parseable artist + title. LRCLib is
+			// free and returns quickly (cached as null) for non-music.
 			if (m?.artist && m.title) {
 				const key = `${m.artist}|${m.title}`;
 				if (key !== lastPrefetchKey) {
@@ -69,50 +65,55 @@ function App() {
 			}
 		};
 
-		// Poll the DOM every 250ms until its video title differs from the
-		// previously-known one. That's the moment YT has actually finished
-		// swapping `<ytd-watch-metadata>` for the new track.
-		const pollUntilFresh = (previousTitle: string) => {
+		// Wait for the DOM to reflect the new video. Two completion signals:
+		// 1. Same videoId as last applied — DOM is already right (e.g. URL
+		//    only changed playlist `index=`, video itself is the same).
+		// 2. Different videoId — wait until DOM title differs from the
+		//    previously-applied one. That's when YT swapped the metadata.
+		const pollUntilFresh = () => {
 			if (pollTimer) clearTimeout(pollTimer);
+			const expectedVideoId = new URL(location.href).searchParams.get("v");
 			let attempts = 0;
 
 			const tick = () => {
 				const m = readCurrentVideoMeta();
-				const currentTitle = m?.videoTitle ?? "";
-				const looksFresh =
-					currentTitle !== "" && currentTitle !== previousTitle;
-
-				if (looksFresh) {
+				if (!m) {
+					// DOM not ready yet (no title or all placeholders).
+					if (++attempts > 24) return; // 6 s ceiling
+					pollTimer = setTimeout(tick, 250);
+					return;
+				}
+				const sameVideo =
+					expectedVideoId !== null && expectedVideoId === lastAppliedVideoId;
+				const titleChanged = m.videoTitle !== lastAppliedTitle;
+				if (sameVideo || titleChanged) {
 					applyMeta(m);
 					return;
 				}
-				if (++attempts > 24) {
-					// 6 s ceiling. We deliberately do NOT applyMeta(m) here —
-					// that would feed the previous track's metadata back into
-					// the panel and (cache-hit) display its lyrics under the
-					// new video. Better to leave the panel in its loading
-					// state until the user refreshes manually.
-					return;
-				}
+				if (++attempts > 24) return;
 				pollTimer = setTimeout(tick, 250);
 			};
 			tick();
 		};
 
 		const onNavigated = () => {
-			// New video. Drop everything from the previous track immediately
-			// so the panel can't keep showing stale lyrics under a new song.
+			// Same video, just URL params changed (e.g. playlist index bump).
+			// Nothing to refresh — the current meta is still correct.
+			const newVideoId = new URL(location.href).searchParams.get("v");
+			if (newVideoId !== null && newVideoId === lastAppliedVideoId) {
+				return;
+			}
 			prefetchToken.current++;
 			setBtnStatus("idle");
 			setPrefetched(null);
 			setMeta(null);
 			lastPrefetchKey = "";
-			pollUntilFresh(lastSeenTitle);
+			pollUntilFresh();
 		};
 
-		// Initial load: empty `previousTitle` means any non-empty DOM title
+		// Initial mount: lastApplied* are empty, so any non-empty parsed meta
 		// will be accepted on the first tick.
-		pollUntilFresh("");
+		pollUntilFresh();
 		const off = onVideoChange(onNavigated);
 
 		return () => {
