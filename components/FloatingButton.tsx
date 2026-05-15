@@ -80,13 +80,24 @@ export function FloatingButton({ onClick, active, status }: Props) {
 					alignItems: "center",
 					justifyContent: "center",
 					boxShadow: "0 4px 12px rgba(0,0,0,0.45)",
-					fontSize: 20,
-					lineHeight: 1,
 					padding: 0,
 					transition: "color 0.15s ease",
 				}}
 			>
-				♪{ringClass && <span className={ringClass} />}
+				{/* SVG (rather than the ♪ glyph) so the icon honors `color`.
+				    On macOS the Unicode music note renders via the system
+				    emoji font, which ignores CSS color. */}
+				<svg
+					width="20"
+					height="20"
+					viewBox="0 0 24 24"
+					fill="currentColor"
+					aria-hidden="true"
+					style={{ display: "block" }}
+				>
+					<path d="M12 3v10.55c-.59-.34-1.27-.55-2-.55-2.21 0-4 1.79-4 4s1.79 4 4 4 4-1.79 4-4V7h4V3h-6z" />
+				</svg>
+				{ringClass && <span className={ringClass} />}
 			</button>
 		</Rnd>
 	);

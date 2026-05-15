@@ -256,7 +256,27 @@ export function LyricsPanel({ meta, prefetched, onClose }: Props) {
 						userSelect: "none",
 					}}
 				>
-					<strong style={{ fontSize: 13, letterSpacing: 0.2 }}>♪ Lyrics</strong>
+					<strong
+						style={{
+							fontSize: 13,
+							letterSpacing: 0.2,
+							display: "flex",
+							alignItems: "center",
+							gap: 6,
+						}}
+					>
+						<svg
+							width="14"
+							height="14"
+							viewBox="0 0 24 24"
+							fill="currentColor"
+							aria-hidden="true"
+							style={{ display: "block" }}
+						>
+							<path d="M12 3v10.55c-.59-.34-1.27-.55-2-.55-2.21 0-4 1.79-4 4s1.79 4 4 4 4-1.79 4-4V7h4V3h-6z" />
+						</svg>
+						Lyrics
+					</strong>
 					<div style={{ display: "flex", gap: 2 }}>
 						<button
 							type="button"

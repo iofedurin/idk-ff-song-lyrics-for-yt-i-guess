@@ -163,6 +163,11 @@ export default defineContentScript({
 			alignment: "top-left",
 			zIndex: 2147483646,
 			anchor: "html",
+			// Stop keydown/keyup/keypress from bubbling out of the shadow root
+			// into YouTube's document-level listeners. Without this, typing
+			// "m" in our search input mutes the player; "k" pauses; "j"/"l"
+			// seek; "f" goes fullscreen; etc.
+			isolateEvents: true,
 			onMount(container) {
 				const root = ReactDOM.createRoot(container);
 				root.render(<App />);
