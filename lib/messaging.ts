@@ -1,12 +1,17 @@
 import { defineExtensionMessaging } from "@webext-core/messaging";
-import type { LyricsResult, SearchHit, TestResult } from "./lyrics/types";
+import type {
+	LyricsResult,
+	SearchHit,
+	SearchOutcome,
+	TestResult,
+} from "./lyrics/types";
 
 // Protocol for content script ↔ background communication.
 // Background does the fetching (CORS-free, central cache, hides API keys
 // from the page context).
 interface ProtocolMap {
 	fetchLyrics(data: { artist: string; title: string }): LyricsResult | null;
-	searchLyrics(data: { query: string }): SearchHit[];
+	searchLyrics(data: { query: string }): SearchOutcome;
 	fetchById(data: { hit: SearchHit }): LyricsResult | null;
 	// Warm-up the background cache so a subsequent fetchLyrics returns
 	// instantly. Returns the full result (or null) so the content script

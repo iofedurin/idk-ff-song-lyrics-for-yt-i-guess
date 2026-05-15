@@ -36,3 +36,16 @@ export interface TestResult {
 	hasSynced: boolean;
 	error?: string;
 }
+
+export interface ProviderError {
+	providerId: ProviderId;
+	message: string;
+}
+
+export interface SearchOutcome {
+	hits: SearchHit[];
+	errors: ProviderError[];
+	/** Provider IDs that participated in this search (so the UI can say
+	 *  "tried lrclib, lyricsOvh" etc.). */
+	attempted: ProviderId[];
+}

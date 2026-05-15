@@ -33,7 +33,12 @@ type State =
 	| { kind: "lyrics"; result: LyricsResult }
 	| { kind: "results"; hits: SearchHit[] }
 	| { kind: "empty" }
-	| { kind: "error"; message: string };
+	| { kind: "error"; message: string }
+	| {
+			kind: "providerError";
+			messages: string[];
+			lastQuery: string;
+	  };
 
 // Rendered height of the panel when minimized — just the drag bar.
 const HEADER_HEIGHT = 36;
@@ -76,10 +81,22 @@ export function LyricsPanel({ meta, prefetched, onClose }: Props) {
 		const seq = ++seqRef.current;
 		setState({ kind: "loading" });
 		try {
-			const hits = await sendMessage("searchLyrics", { query: q });
+			const outcome = await sendMessage("searchLyrics", { query: q });
 			if (seq !== seqRef.current) return;
+			const { hits, errors } = outcome;
 			if (hits.length === 0) {
-				setState({ kind: "empty" });
+				// Tell apart "providers worked but found nothing" from "providers
+				// errored out". The latter usually means LRCLib is down (cert,
+				// network, etc.) — the user can retry rather than rephrase.
+				if (errors.length > 0) {
+					setState({
+						kind: "providerError",
+						messages: errors.map((e) => `${e.providerId}: ${e.message}`),
+						lastQuery: q,
+					});
+				} else {
+					setState({ kind: "empty" });
+				}
 				return;
 			}
 			if (hits.length === 1) {
@@ -344,6 +361,43 @@ export function LyricsPanel({ meta, prefetched, onClose }: Props) {
 					{state.kind === "error" && (
 						<div style={{ color: "#ff5277" }}>Error: {state.message}</div>
 					)}
+					{state.kind === "providerError" && (
+						<div
+							style={{
+								display: "flex",
+								flexDirection: "column",
+								gap: 10,
+								padding: "16px 0",
+							}}
+						>
+							<div style={{ color: "#ff5277", fontWeight: 500 }}>
+								Lyrics provider unreachable
+							</div>
+							<div style={{ opacity: 0.7, fontSize: 12, lineHeight: 1.4 }}>
+								All sources failed to respond. This usually means a temporary
+								upstream issue (e.g. LRCLib down or unreachable from your
+								network). You can retry, or add a Genius API key in the options
+								page to enable an additional fallback.
+							</div>
+							<details style={{ opacity: 0.55, fontSize: 11 }}>
+								<summary style={{ cursor: "pointer" }}>Details</summary>
+								<ul style={{ margin: "6px 0 0", paddingLeft: 18 }}>
+									{state.messages.map((m) => (
+										<li key={m}>{m}</li>
+									))}
+								</ul>
+							</details>
+							<div style={{ display: "flex", gap: 6 }}>
+								<button
+									type="button"
+									onClick={() => runSearch(state.lastQuery)}
+									style={retryBtnStyle}
+								>
+									Retry
+								</button>
+							</div>
+						</div>
+					)}
 					{state.kind === "results" && (
 						<ResultsList hits={state.hits} onPick={pickHit} />
 					)}
@@ -370,4 +424,16 @@ const headerBtnStyle: React.CSSProperties = {
 	lineHeight: 1,
 	padding: "2px 8px",
 	borderRadius: 3,
+};
+
+const retryBtnStyle: React.CSSProperties = {
+	background: "rgba(255,82,119,0.18)",
+	border: "1px solid rgba(255,82,119,0.4)",
+	color: "#ff5277",
+	padding: "6px 14px",
+	borderRadius: 4,
+	cursor: "pointer",
+	fontSize: 12,
+	fontWeight: 500,
+	alignSelf: "flex-start",
 };

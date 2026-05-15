@@ -6,6 +6,7 @@ import type {
 	Provider,
 	ProviderId,
 	SearchHit,
+	SearchOutcome,
 	TestResult,
 } from "./types";
 
@@ -47,17 +48,26 @@ export async function fetchLyrics(
 export async function searchLyrics(
 	query: string,
 	cfg: ProviderConfig,
-): Promise<SearchHit[]> {
+): Promise<SearchOutcome> {
+	const providers = buildProviders(cfg);
 	const results = await Promise.all(
-		buildProviders(cfg).map(async (p) => {
+		providers.map(async (p) => {
 			try {
-				return await p.search(query);
-			} catch {
-				return [];
+				const hits = await p.search(query);
+				return { id: p.id, hits, error: null as string | null };
+			} catch (e) {
+				const msg = e instanceof Error ? e.message : String(e);
+				return { id: p.id, hits: [] as SearchHit[], error: msg };
 			}
 		}),
 	);
-	return results.flat();
+	return {
+		hits: results.flatMap((r) => r.hits),
+		errors: results
+			.filter((r): r is typeof r & { error: string } => r.error !== null)
+			.map((r) => ({ providerId: r.id, message: r.error })),
+		attempted: providers.map((p) => p.id),
+	};
 }
 
 export async function fetchById(
