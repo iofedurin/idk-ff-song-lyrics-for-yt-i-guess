@@ -8,6 +8,10 @@ import {
 
 export type ButtonStatus = "idle" | "loading" | "found";
 
+// Pixel distance below which a mousedown/up is treated as a click,
+// not a drag. Defends against sub-pixel hand jitter from rapid clicks.
+const DRAG_THRESHOLD = 5;
+
 interface Props {
 	onClick: () => void;
 	active: boolean;
@@ -21,12 +25,12 @@ export function FloatingButton({ onClick, active, status }: Props) {
 			: buttonPositionYtStorage;
 
 	const [pos, setPos] = useState<XY | null>(null);
-	// Use a ref (not state) so onDragStop reads the latest value within the
-	// same synchronous mousedown→mouseup cycle. With useState the handler
-	// closure captures the previous render's `dragged`, so a click right
-	// after a real drag would still see `dragged=true` and overwrite the
-	// stored position with whatever react-rnd reports.
-	const draggedRef = useRef(false);
+	// Distinguish a click from a real drag by measuring how far the pointer
+	// moved between mousedown and mouseup. react-rnd's `dragged` boolean
+	// flips on the first onDrag event even from sub-pixel hand jitter, so
+	// rapid clicks end up writing tiny offsets back to storage every time.
+	// Anything under DRAG_THRESHOLD px counts as a click.
+	const dragStartRef = useRef<XY>({ x: 0, y: 0 });
 
 	useEffect(() => {
 		storageItem.getValue().then((v) => setPos(v ?? defaultPos()));
@@ -46,14 +50,15 @@ export function FloatingButton({ onClick, active, status }: Props) {
 			position={pos}
 			enableResizing={false}
 			bounds="window"
-			onDragStart={() => {
-				draggedRef.current = false;
-			}}
-			onDrag={() => {
-				draggedRef.current = true;
+			onDragStart={(_, d) => {
+				dragStartRef.current = { x: d.x, y: d.y };
 			}}
 			onDragStop={(_, d) => {
-				if (!draggedRef.current) return;
+				const dx = d.x - dragStartRef.current.x;
+				const dy = d.y - dragStartRef.current.y;
+				if (Math.abs(dx) < DRAG_THRESHOLD && Math.abs(dy) < DRAG_THRESHOLD) {
+					return; // click, not a drag
+				}
 				const np = { x: d.x, y: d.y };
 				setPos(np);
 				storageItem.setValue(np);
@@ -63,7 +68,14 @@ export function FloatingButton({ onClick, active, status }: Props) {
 			<button
 				type="button"
 				onClick={() => {
-					if (!draggedRef.current) onClick();
+					// Suppress the click that fires at the end of a real drag.
+					if (
+						Math.abs(pos.x - dragStartRef.current.x) >= DRAG_THRESHOLD ||
+						Math.abs(pos.y - dragStartRef.current.y) >= DRAG_THRESHOLD
+					) {
+						return;
+					}
+					onClick();
 				}}
 				onDoubleClick={() => {
 					const def = defaultPos();
