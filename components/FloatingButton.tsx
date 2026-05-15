@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Rnd } from "react-rnd";
 import {
 	buttonPositionYtMusicStorage,
@@ -21,8 +21,12 @@ export function FloatingButton({ onClick, active, status }: Props) {
 			: buttonPositionYtStorage;
 
 	const [pos, setPos] = useState<XY | null>(null);
-	// Distinguish a click from the click event fired at the end of a drag.
-	const [dragged, setDragged] = useState(false);
+	// Use a ref (not state) so onDragStop reads the latest value within the
+	// same synchronous mousedown→mouseup cycle. With useState the handler
+	// closure captures the previous render's `dragged`, so a click right
+	// after a real drag would still see `dragged=true` and overwrite the
+	// stored position with whatever react-rnd reports.
+	const draggedRef = useRef(false);
 
 	useEffect(() => {
 		storageItem.getValue().then((v) => setPos(v ?? defaultPos()));
@@ -42,13 +46,14 @@ export function FloatingButton({ onClick, active, status }: Props) {
 			position={pos}
 			enableResizing={false}
 			bounds="window"
-			onDragStart={() => setDragged(false)}
-			onDrag={() => setDragged(true)}
+			onDragStart={() => {
+				draggedRef.current = false;
+			}}
+			onDrag={() => {
+				draggedRef.current = true;
+			}}
 			onDragStop={(_, d) => {
-				// react-rnd fires onDragStop on every mousedown/up even without
-				// movement, sometimes with d={x:0, y:0}. Without this guard a
-				// plain click on the button would overwrite the saved position.
-				if (!dragged) return;
+				if (!draggedRef.current) return;
 				const np = { x: d.x, y: d.y };
 				setPos(np);
 				storageItem.setValue(np);
@@ -58,7 +63,7 @@ export function FloatingButton({ onClick, active, status }: Props) {
 			<button
 				type="button"
 				onClick={() => {
-					if (!dragged) onClick();
+					if (!draggedRef.current) onClick();
 				}}
 				onDoubleClick={() => {
 					const def = defaultPos();
